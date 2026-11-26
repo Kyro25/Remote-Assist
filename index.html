@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Assist</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 min-h-screen flex flex-col justify-between p-6 transition-colors duration-200">
+  
+  <header class="max-w-4xl w-full mx-auto flex justify-between items-center py-4 border-b border-slate-200 dark:border-slate-800">
+    <div>
+      <h1 class="text-xl font-bold tracking-tight text-blue-600 dark:text-blue-500">Remote Assist</h1>
+      <p class="text-slate-500 dark:text-slate-400 text-xs">Simple, secure browser-based streaming.</p>
+    </div>
+    
+    <button id="theme-toggle" class="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition">
+      Switch Light/Dark
+    </button>
+  </header>
+
+  <main class="max-w-4xl w-full mx-auto my-auto flex-1 flex flex-col justify-center py-12">
+    
+    <div id="role-selection" class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+      <div class="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-sm hover:shadow-md transition">
+        <div>
+          <span class="text-[10px] bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold tracking-wider uppercase">Support Agent</span>
+          <h2 class="text-lg font-bold mt-4 mb-2">Help a Customer</h2>
+          <p class="text-slate-500 dark:text-slate-400 text-sm mb-6">Start a session to view a customer's feed in real time.</p>
+        </div>
+        <button id="select-agent-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">Open Agent Dashboard</button>
+      </div>
+
+      <div class="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-sm hover:shadow-md transition">
+        <div>
+          <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold tracking-wider uppercase">Customer</span>
+          <h2 class="text-lg font-bold mt-4 mb-2">Share Your View</h2>
+          <p class="text-slate-500 dark:text-slate-400 text-sm mb-6">Enter the connection code given by your agent to stream your desktop or mobile camera view.</p>
+        </div>
+        <button id="select-customer-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">Connect with Code</button>
+      </div>
+    </div>
+
+    <div id="agent-workspace" class="hidden space-y-6 w-full">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        
+        <div class="lg:col-span-2 space-y-4">
+          <div>
+            <p class="text-[10px] font-bold tracking-widest uppercase text-slate-400">Connection Code</p>
+            <p class="text-4xl font-black tracking-widest text-blue-600 dark:text-blue-400 select-all font-mono mt-1 uppercase" id="agent-code-display">Creating room...</p>
+          </div>
+          
+          <div class="space-y-1.5">
+            <p class="text-[10px] font-bold tracking-widest uppercase text-slate-400">Direct Invite Link</p>
+            <div class="flex gap-2">
+              <input type="text" id="share-link-input" readonly placeholder="Generating link..." class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl px-3 py-2 text-xs select-all focus:outline-none font-mono">
+              <button id="copy-link-btn" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs px-4 rounded-xl border border-slate-200 dark:border-slate-700 transition whitespace-nowrap">
+                Copy Link
+              </button>
+            </div>
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button id="agent-fullscreen-btn" class="hidden bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs px-4 py-2 rounded-xl transition items-center">
+              Full Screen
+            </button>
+            <button id="agent-disconnect-btn" class="hidden bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs px-4 py-2 rounded-xl transition items-center">
+              Disconnect
+            </button>
+          </div>
+        </div>
+
+        <div id="qr-container" class="hidden flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-center">
+          <canvas id="qr-canvas" class="bg-white p-2 rounded-lg shadow-sm mb-2 max-w-[128px] max-h-[128px] cursor-pointer" title="Click to copy link"></canvas>
+          <p class="text-[10px] text-slate-400 font-medium">Scan or click to copy link</p>
+        </div>
+      </div>
+
+      <div id="video-wrapper" class="relative w-full aspect-video bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-200 dark:border-slate-900 shadow-inner">
+        <div id="agent-status" class="absolute text-slate-400 font-medium text-center p-4 max-w-sm">
+          <span class="block text-sm mb-1 text-slate-600 dark:text-slate-300 font-semibold animate-pulse">Waiting for the customer to connect...</span>
+        </div>
+        <video id="agent-video" autoplay playsinline class="w-full h-full object-contain z-10 hidden"></video>
+      </div>
+    </div>
+
+    <div id="customer-workspace" class="hidden max-w-md mx-auto w-full">
+      <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+        <div class="text-center">
+          <h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">Connect to Agent</h3>
+          <p class="text-xs text-slate-400 mt-1">Type the 6-character code your agent gave you.</p>
+        </div>
+
+        <div id="network-blocked-banner" class="hidden p-3.5 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 rounded-xl border border-rose-200/50 dark:border-rose-900/40 text-xs leading-normal">
+          <span class="font-bold block mb-1">⚠️ Connection Problem Detected</span>
+          Your current internet connection appears to be blocking secure video linking ports (STUN). Please try to <strong>switch to another Wi-Fi network</strong>, <strong>switch to mobile data</strong>, or <strong>enable a VPN</strong> to connect.
+        </div>
+
+        <div id="device-notice-banner" class="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 rounded-xl border border-blue-200/50 dark:border-blue-900/40 text-xs leading-normal">
+        </div>
+        
+        <div class="space-y-1">
+          <label class="block text-[10px] font-bold tracking-widest uppercase text-slate-400">6-Character Code</label>
+          <input type="text" id="customer-input-code" maxlength="6" placeholder="A1B2C3" style="text-transform: uppercase;" class="w-full text-center text-3xl font-mono tracking-widest bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-slate-900 dark:text-slate-50 focus:outline-none focus:border-blue-500 transition">
+        </div>
+
+        <div id="camera-select-container" class="hidden space-y-1">
+          <label class="block text-[10px] font-bold tracking-widest uppercase text-slate-400">Select Web Camera</label>
+          <select id="desktop-camera-dropdown" class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition">
+            <option value="">Default System Camera</option>
+          </select>
+        </div>
+
+        <div id="action-buttons-container" class="flex flex-col gap-3 pt-2">
+        </div>
+        
+        <div id="customer-active-status" class="hidden text-center space-y-4 pt-2">
+          <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden group shadow-inner">
+            <video id="customer-local-preview" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            <button id="customer-fullscreen-btn" class="absolute bottom-3 right-3 bg-slate-900/80 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium tracking-wide transition shadow opacity-90 hover:opacity-100 z-20">
+              View Full Screen
+            </button>
+          </div>
+
+          <div class="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200/50 dark:border-emerald-900/30">
+            <p class="text-emerald-700 dark:text-emerald-400 font-semibold text-sm animate-pulse">Streaming Live</p>
+            <p id="customer-sharing-type-label" class="text-[10px] text-emerald-600/70 dark:text-emerald-400/60 mt-0.5">Your view is broadcasting securely to the agent dashboard.</p>
+          </div>
+          
+          <button id="customer-stop-btn" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold py-3 rounded-xl transition">Stop Sharing</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="text-center text-[10px] tracking-wider font-medium text-slate-400 dark:text-slate-600 uppercase py-4 border-t border-slate-200 dark:border-slate-900">
+    Secure End-to-End Encryption
+  </footer>
+
+  <script>
+    const pathCode = window.location.pathname.replace(/^\/|\/$/g, "");
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramCode = urlParams.get('code');
+    const rawCode = pathCode || paramCode;
+    
+    let initialRoomCode = /^[a-zA-Z0-9]{6}$/.test(rawCode) ? rawCode.toUpperCase() : null;
+
+    let peer = null;
+    let dataConnection = null;
+    let activeCall = null;
+    let localStream = null;
+
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    
+    function initTheme() {
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    
+    themeToggleBtn.addEventListener('click', () => {
+      if (document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
+      } else {
+        document.documentElement.classList.add('dark');
+        localStorage.theme = 'dark';
+      }
+    });
+    
+    initTheme();
+
+    const codeInput = document.getElementById('customer-input-code');
+    const deviceNotice = document.getElementById('device-notice-banner');
+    const networkBanner = document.getElementById('network-blocked-banner');
+    const actionContainer = document.getElementById('action-buttons-container');
+    const previewVideo = document.getElementById('customer-local-preview');
+    const customerFullscreenBtn = document.getElementById('customer-fullscreen-btn');
+    const cameraSelectContainer = document.getElementById('camera-select-container');
+    const cameraDropdown = document.getElementById('desktop-camera-dropdown');
+
+    codeInput.addEventListener('input', () => {
+      codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobileDevice) {
+      deviceNotice.innerHTML = `
+        Full system desktop screen sharing is only supported on Windows or Mac. Please stream your mobile camera video view instead using the selectors below.
+      `;
+      
+      actionContainer.innerHTML = `
+        <button id="btn-share-rear" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">Share Rear Camera</button>
+        <button id="btn-share-front" class="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-3 rounded-xl transition border border-slate-200 dark:border-slate-700">Share Front Camera</button>
+      `;
+    } else {
+      deviceNotice.innerHTML = `
+        Choose "Share Screen" to map your entire computer monitor frame, or select "Share Camera" to stream your connected webcam.
+      `;
+      
+      actionContainer.innerHTML = `
+        <button id="btn-share-desktop" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">Share Screen</button>
+        <button id="btn-share-camera" class="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold py-3 rounded-xl transition border border-slate-200 dark:border-slate-700">Share Camera</button>
+      `;
+    }
+
+    function checkStunPortAvailability() {
+      return new Promise((resolve) => {
+        try {
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          });
+          let resolved = false;
+
+          pc.createDataChannel('test');
+          pc.addEventListener('icecandidate', (e) => {
+            if (e.candidate && !resolved) {
+              resolved = true;
+              pc.close();
+              resolve(true);
+            }
+          });
+
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer))
+            .catch(() => {});
+
+          setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              pc.close();
+              resolve(false);
+            }
+          }, 1500);
+        } catch (err) {
+          resolve(false);
+        }
+      });
+    }
+
+    async function populateDesktopCameras() {
+      if (isMobileDevice) return; 
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        
+        if (videoDevices.length > 0) {
+          const currentSelection = cameraDropdown.value;
+          cameraDropdown.innerHTML = '';
+          videoDevices.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Camera ${index + 1}`;
+            if (device.deviceId === currentSelection) option.selected = true;
+            cameraDropdown.appendChild(option);
+          });
+          cameraSelectContainer.classList.remove('hidden');
+        }
+      } catch (e) {
+        console.warn("Could not check device catalog:", e);
+      }
+    }
+
+    actionContainer.addEventListener('click', (e) => {
+      if (!e.target || e.target.tagName !== 'BUTTON') return;
+      
+      const buttonId = e.target.id;
+      if (buttonId === 'btn-share-rear') initiateStream('environment');
+      else if (buttonId === 'btn-share-front') initiateStream('user');
+      else if (buttonId === 'btn-share-desktop') initiateStream('desktop');
+      else if (buttonId === 'btn-share-camera') initiateStream('desktop-camera');
+    });
+
+    cameraDropdown.addEventListener('change', () => {
+      if (!isMobileDevice && localStream && localStream.getVideoTracks().length > 0) {
+        initiateStream('desktop-camera');
+      }
+    });
+
+    customerFullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        previewVideo.requestFullscreen().catch(err => {
+          alert(`Fullscreen failed: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    async function activateCustomerWorkspace() {
+      document.getElementById('role-selection').classList.add('hidden');
+      document.getElementById('customer-workspace').classList.remove('hidden');
+      if (!isMobileDevice) {
+        setTimeout(populateDesktopCameras, 300);
+      }
+      
+      const isStunWorking = await checkStunPortAvailability();
+      if (!isStunWorking) {
+        networkBanner.classList.remove('hidden');
+      }
+    }
+
+    if (initialRoomCode) {
+      activateCustomerWorkspace();
+      codeInput.value = initialRoomCode;
+    }
+
+    document.getElementById('select-agent-btn').addEventListener('click', () => {
+      document.getElementById('role-selection').classList.add('hidden');
+      document.getElementById('agent-workspace').classList.remove('hidden');
+      initializeAgent();
+    });
+
+    document.getElementById('select-customer-btn').addEventListener('click', () => {
+      activateCustomerWorkspace();
+    });
+
+    document.getElementById('agent-fullscreen-btn').addEventListener('click', () => {
+      const videoEl = document.getElementById('agent-video');
+      if (!document.fullscreenElement) {
+        videoEl.requestFullscreen().catch(err => {
+          alert(`Fullscreen error: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.getElementById('agent-disconnect-btn').addEventListener('click', () => {
+      if (dataConnection) {
+        dataConnection.send({ type: 'force_disconnect' });
+      }
+      disconnectAgent();
+    });
+
+    function copyInviteLink() {
+      const linkInput = document.getElementById('share-link-input');
+      if (!linkInput.value) return;
+      
+      navigator.clipboard.writeText(linkInput.value).then(() => {
+        const copyBtn = document.getElementById('copy-link-btn');
+        const originalText = copyBtn.innerText;
+        copyBtn.innerText = "Copied!";
+        setTimeout(() => copyBtn.innerText = originalText, 2000);
+      }).catch(err => console.error("Clipboard copy blocked:", err));
+    }
+
+    document.getElementById('copy-link-btn').addEventListener('click', copyInviteLink);
+    document.getElementById('qr-canvas').addEventListener('click', copyInviteLink);
+
+    function initializeAgent() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let customRoomKey = '';
+      for (let i = 0; i < 6; i++) { customRoomKey += chars.charAt(Math.floor(Math.random() * chars.length)); }
+
+      peer = new Peer(customRoomKey);
+
+      peer.on('open', (validId) => {
+        document.getElementById('agent-code-display').innerText = validId;
+        const cleanLink = window.location.origin + window.location.pathname + '?code=' + validId;
+        document.getElementById('share-link-input').value = cleanLink;
+        
+        const qrContainer = document.getElementById('qr-container');
+        qrContainer.classList.remove('hidden');
+        qrContainer.classList.add('flex');
+        
+        new QRious({
+          element: document.getElementById('qr-canvas'),
+          value: cleanLink,
+          size: 128,
+          background: '#ffffff',
+          foreground: '#0f172a',
+          level: 'H'
+        });
+
+        document.getElementById('agent-status').innerHTML = `
+          <span class="block text-sm mb-1 text-slate-800 dark:text-slate-200 font-semibold">Room Ready</span>
+          Give the connection code or share the direct link with the customer to see their feed.
+        `;
+      });
+
+      peer.on('connection', (conn) => {
+        dataConnection = conn;
+        conn.on('close', () => disconnectAgent());
+      });
+
+      peer.on('call', (call) => {
+        activeCall = call;
+        document.getElementById('agent-status').innerText = "Connecting video feed...";
+        call.answer();
+        call.on('stream', (remoteStream) => {
+          document.getElementById('agent-status').classList.add('hidden');
+          const videoEl = document.getElementById('agent-video');
+          videoEl.classList.remove('hidden');
+          videoEl.srcObject = remoteStream;
+
+          document.getElementById('agent-fullscreen-btn').classList.remove('hidden');
+          document.getElementById('agent-disconnect-btn').classList.remove('hidden');
+        });
+      });
+
+      peer.on('error', (err) => {
+        console.error("PeerJS Error:", err);
+        if (err.type === 'unavailable-id') {
+          initializeAgent();
+        } else {
+          document.getElementById('agent-status').innerHTML = `
+            <span class="text-red-500 font-bold">Connection Failed</span><br>
+            <span class="text-[10px] text-slate-500">${err.message}</span>
+          `;
+        }
+      });
+    }
+
+    function disconnectAgent() {
+      if (activeCall) { activeCall.close(); activeCall = null; }
+      if (dataConnection) { dataConnection.close(); dataConnection = null; }
+      const videoEl = document.getElementById('agent-video');
+      videoEl.classList.add('hidden');
+      videoEl.srcObject = null;
+      
+      document.getElementById('agent-fullscreen-btn').classList.add('hidden');
+      document.getElementById('agent-disconnect-btn').classList.add('hidden');
+      document.getElementById('qr-container').classList.replace('flex', 'hidden');
+      
+      document.getElementById('agent-status').classList.remove('hidden');
+      document.getElementById('agent-status').innerHTML = `
+        <span class="block text-sm mb-1 text-blue-600 dark:text-blue-400 font-semibold">Session Ended</span>
+        Refresh the page to create a new support session.
+      `;
+    }
+
+    function ensureTrackIsLive(track) {
+      return new Promise((resolve) => {
+        if (track.readyState === 'live' && !track.muted) {
+          return resolve();
+        }
+        let resolved = false;
+        const handleUnmute = () => {
+          if (!resolved) {
+            resolved = true;
+            track.removeEventListener('unmute', handleUnmute);
+            clearInterval(fallbackInterval);
+            resolve();
+          }
+        };
+        track.addEventListener('unmute', handleUnmute);
+        const fallbackInterval = setInterval(() => {
+          if (track.readyState === 'live' && !track.muted && !resolved) {
+            resolved = true;
+            track.removeEventListener('unmute', handleUnmute);
+            clearInterval(fallbackInterval);
+            resolve();
+          }
+        }, 50);
+      });
+    }
+
+    async function initiateStream(sourceType) {
+      const code = codeInput.value.trim().toUpperCase();
+      if (code.length !== 6) { return alert("Please enter a valid 6-character code."); }
+
+      let sharingLabelText = "Your agent is viewing your feed.";
+      
+      const isStunWorking = await checkStunPortAvailability();
+      if (!isStunWorking) {
+        networkBanner.classList.remove('hidden');
+        return; 
+      } else {
+        networkBanner.classList.add('hidden');
+      }
+
+      if (localStream) {
+        localStream.getTracks().forEach(t => { t.stop(); t.onended = null; });
+        localStream = null;
+      }
+
+      if (!peer) {
+        peer = new Peer();
+      }
+
+      try {
+        if (sourceType === 'desktop') {
+          if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+            return alert("This platform does not support full display capture. Please use the camera instead.");
+          }
+          localStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'monitor', width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+            audio: false
+          });
+          sharingLabelText = "Your agent can now view your desktop screen.";
+        } else {
+          if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            return alert("This device environment doesn't have media capture access.");
+          }
+          
+          const videoConstraints = {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          };
+
+          if (isMobileDevice) {
+            videoConstraints.facingMode = { ideal: sourceType };
+          } else {
+            if (sourceType === 'desktop-camera' && cameraDropdown.value) {
+              videoConstraints.deviceId = { exact: cameraDropdown.value };
+            }
+          }
+
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
+          });
+
+          if (isMobileDevice) {
+            if (sourceType === 'environment') sharingLabelText = "Your agent can now see your rear camera feed.";
+            else sharingLabelText = "Your agent can now see your front camera feed.";
+          } else {
+            sharingLabelText = "Your agent can now see your selected webcam feed.";
+          }
+        }
+
+        previewVideo.srcObject = localStream;
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          await ensureTrackIsLive(videoTrack);
+        }
+
+        if (activeCall && activeCall.peerConnection) {
+          const videoSender = activeCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(videoTrack);
+          }
+          document.getElementById('customer-sharing-type-label').innerText = sharingLabelText;
+          return;
+        }
+
+        const linkAndCall = () => {
+          dataConnection = peer.connect(code);
+          dataConnection.on('data', (data) => {
+            if (data.type === 'force_disconnect') { disconnectCustomer(); }
+          });
+          dataConnection.on('close', () => disconnectCustomer());
+          
+          activeCall = peer.call(code, localStream);
+
+          if (activeCall && activeCall.peerConnection) {
+            const pc = activeCall.peerConnection;
+            let hasFoundIceCandidate = false;
+
+            pc.addEventListener('icecandidate', (e) => {
+              if (e.candidate) hasFoundIceCandidate = true;
+            });
+
+            setTimeout(() => {
+              const isBlocked = !hasFoundIceCandidate || pc.iceConnectionState === 'failed';
+              if (isBlocked && localStream) {
+                networkBanner.classList.remove('hidden');
+                disconnectCustomer();
+              }
+            }, 2500);
+          }
+          
+          document.getElementById('customer-sharing-type-label').innerText = sharingLabelText;
+          document.getElementById('customer-input-code').disabled = true;
+          if (sourceType === 'desktop') { cameraSelectContainer.classList.add('hidden'); }
+          actionContainer.classList.add('hidden');
+          document.getElementById('customer-active-status').classList.remove('hidden');
+        };
+
+        peer.on('error', (err) => {
+          console.error("Customer Peer Instance Error: ", err);
+          if (err.type === 'network' || err.type === 'webrtc') {
+            networkBanner.classList.remove('hidden');
+            disconnectCustomer();
+          }
+        });
+
+        if (peer.id) {
+          linkAndCall();
+        } else {
+          peer.on('open', () => { linkAndCall(); });
+        }
+
+        if (videoTrack) {
+          videoTrack.onended = () => disconnectCustomer();
+        }
+
+      } catch (err) {
+        alert("Capture assignment failure: " + err.message);
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+      }
+    }
+
+    document.getElementById('customer-stop-btn').addEventListener('click', () => { disconnectCustomer(); });
+
+    function disconnectCustomer() {
+      if (localStream) { 
+        localStream.getTracks().forEach(track => { track.stop(); track.onended = null; }); 
+        localStream = null; 
+      }
+      if (previewVideo.srcObject) { previewVideo.srcObject = null; }
+      if (peer) { peer.destroy(); peer = null; }
+      dataConnection = null;
+      activeCall = null;
+      document.getElementById('customer-input-code').disabled = false;
+      
+      if (!isMobileDevice) {
+        setTimeout(populateDesktopCameras, 300);
+      } else {
+        cameraSelectContainer.classList.add('hidden');
+      }
+      
+      actionContainer.classList.remove('hidden');
+      document.getElementById('customer-active-status').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
